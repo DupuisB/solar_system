@@ -1,1 +1,0 @@
-/usr/bin/cc CMakeFiles/window.dir/window.c.o -o window  ../src/libglfw3.a -lm /usr/lib64/librt.a -lm -ldl 

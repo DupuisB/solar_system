@@ -1,1 +1,0 @@
-/usr/bin/cc CMakeFiles/windows.dir/windows.c.o -o windows  ../src/libglfw3.a -lm /usr/lib64/librt.a -lm -ldl 
