@@ -1,0 +1,1 @@
+/usr/bin/cc CMakeFiles/icon.dir/icon.c.o -o icon  ../src/libglfw3.a -lm /usr/lib64/librt.a -lm -ldl 
