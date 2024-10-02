@@ -46,6 +46,8 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+#include <GL/glext.h>
+#include <GL/glcorearb.h>
 
 // constants
 const static float kSizeSun = 1;
@@ -63,10 +65,13 @@ GLuint g_program = 0; // A GPU program contains at least a vertex shader and a f
 // OpenGL identifiers
 GLuint g_vao = 0;
 GLuint g_posVbo = 0;
+GLuint g_colorVbo = 0;
 GLuint g_ibo = 0;
 
 // All vertex positions packed in one array [x0, y0, z0, x1, y1, z1, ...]
 std::vector<float> g_vertexPositions;
+// All vertex colors packed in one array [r0, g0, b0, a0, r1, g1, b1, a1, ...]
+std::vector<float> g_vertexColors;
 // All triangle indices packed in one array [v00, v01, v02, v10, v11, v12, ...] with vij the index of j-th vertex of the i-th triangle
 std::vector<unsigned int> g_triangleIndices;
 
@@ -229,9 +234,20 @@ void initGPUprogram() {
 
 // Define your mesh(es) in the CPU memory
 void initCPUgeometry() {
-  // TODO: add vertices and indices for your mesh(es)
-  g_vertexPositions = {};
-  g_triangleIndices = {};
+
+  g_vertexPositions = { // the array of vertex positions [x0, y0, z0, x1, y1, z1, ...]
+  0.f, 0.f, 0.f,
+  1.f, 0.f, 0.f,
+  0.f, 1.f, 0.f
+  };
+
+  g_vertexColors = { // the array of vertex colors [r0, g0, b0, r1, g1, b1, ...]
+  1.f, 0.f, 0.f,
+  0.f, 1.f, 0.f,
+  0.f, 0.f, 1.f
+  };
+
+  g_triangleIndices = { 0, 1, 2 }; // indices just for one triangle
 }
 
 void initGPUgeometry() {
@@ -245,35 +261,38 @@ void initGPUgeometry() {
   glBindVertexArray(g_vao);
 
   // Generate a GPU buffer to store the positions of the vertices
-  size_t vertexBufferSize = sizeof(float)*g_vertexPositions.size(); // Gather the size of the buffer from the CPU-side vector
+  size_t vertexBufferSize = sizeof(float) * g_vertexPositions.size(); // Gather the size of the buffer from the CPU-side vector
 #ifdef _MY_OPENGL_IS_33_
   glGenBuffers(1, &g_posVbo);
   glBindBuffer(GL_ARRAY_BUFFER, g_posVbo);
   glBufferData(GL_ARRAY_BUFFER, vertexBufferSize, g_vertexPositions.data(), GL_DYNAMIC_READ);
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(GLfloat), 0);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), 0); // Attribute index 0 for positions
   glEnableVertexAttribArray(0);
 #else
   glCreateBuffers(1, &g_posVbo);
   glBindBuffer(GL_ARRAY_BUFFER, g_posVbo);
-  glNamedBufferStorage(g_posVbo, vertexBufferSize, g_vertexPositions.data(), GL_DYNAMIC_STORAGE_BIT); // Create a data storage on the GPU and fill it from a CPU array
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(GLfloat), 0);
-  glEnableVertexAttribArray(0);
+  glNamedBufferStorage(g_posVbo, vertexBufferSize, g_vertexPositions.data(), GL_DYNAMIC_STORAGE_BIT);
+  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), 0); // Attribute index 0 for positions
+  glEnableVertexAttribArray(1);
 #endif
 
-  // Same for an index buffer object that stores the list of indices of the
-  // triangles forming the mesh
-  size_t indexBufferSize = sizeof(unsigned int)*g_triangleIndices.size();
+  // Generate a GPU buffer to store the colors of the vertices
+  size_t colorBufferSize = sizeof(float) * g_vertexColors.size(); // Gather the size of the buffer from the CPU-side vector
 #ifdef _MY_OPENGL_IS_33_
-  glGenBuffers(1, &g_ibo);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_ibo);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER, indexBufferSize, g_triangleIndices.data(), GL_DYNAMIC_READ);
+  glGenBuffers(1, &g_colorVbo);
+  glBindBuffer(GL_ARRAY_BUFFER, g_colorVbo);
+  glBufferData(GL_ARRAY_BUFFER, colorBufferSize, g_vertexColors.data(), GL_DYNAMIC_READ);
+  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), 0); // Attribute index 1 for colors
+  glEnableVertexAttribArray(1);
 #else
-  glCreateBuffers(1, &g_ibo);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_ibo);
-  glNamedBufferStorage(g_ibo, indexBufferSize, g_triangleIndices.data(), GL_DYNAMIC_STORAGE_BIT);
+  glCreateBuffers(1, &g_colorVbo);
+  glBindBuffer(GL_ARRAY_BUFFER, g_colorVbo);
+  glNamedBufferStorage(g_colorVbo, colorBufferSize, g_vertexColors.data(), GL_DYNAMIC_STORAGE_BIT);
+  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), 0); // Attribute index 1 for colors
+  glEnableVertexAttribArray(1);
 #endif
 
-  glBindVertexArray(0); // deactivate the VAO for now, will be activated again when rendering
+  glBindVertexArray(0); // Deactivate the VAO for now, will be activated again when rendering
 }
 
 void initCamera() {
@@ -323,6 +342,9 @@ void update(const float currentTimeInSec) {
 }
 
 int main(int argc, char ** argv) {
+  // Print in the terminal that the app is launching
+  std::cout << "Launching the application" << std::endl;
+
   init(); // Your initialization code (user interface, OpenGL states, scene with geometry, material, lights, etc)
   while(!glfwWindowShouldClose(g_window)) {
     update(static_cast<float>(glfwGetTime()));
