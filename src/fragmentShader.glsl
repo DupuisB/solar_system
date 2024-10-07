@@ -1,7 +1,9 @@
-#version 330 core	     // Minimal GL version support expected from the GPU
+#version 330 core
 
-out vec4 color;	  // Shader output: the color response attached to this fragment
+in vec3 vertexColor; // Input color from the vertex shader
+
+out vec4 FragColor; // Output color
 
 void main() {
-	color = vec4(1.0); // build an RGBA from an RGB
+    FragColor = vec4(vertexColor, 1.0); // Set the fragment color
 }
