@@ -273,7 +273,7 @@ void initGLFW()
 
     // Create the window
     g_window = glfwCreateWindow(
-        1024, 768,
+        1024, 1024,
         "Interactive 3D Applications (OpenGL) - Simple Solar System",
         nullptr, nullptr);
     if (!g_window)
@@ -349,7 +349,7 @@ void initGPUprogram()
 // Define your mesh(es) in the CPU memory
 void initCPUgeometry()
 {
-    g_sphereMesh = g_sphereMesh->genSphere(16);
+    g_sphereMesh = g_sphereMesh->genSphere(512);
 }
 
 void initGPUgeometry()
@@ -397,8 +397,9 @@ void render()
     glUniformMatrix4fv(glGetUniformLocation(g_program, "viewMat"), 1, GL_FALSE, glm::value_ptr(viewMatrix)); // compute the view matrix of the camera and pass it to the GPU program
     glUniformMatrix4fv(glGetUniformLocation(g_program, "projMat"), 1, GL_FALSE, glm::value_ptr(projMatrix)); // compute the projection matrix of the camera and pass it to the GPU program
 
-    // Pass the camera position to the fragment shader
-    glUniform3fv(glGetUniformLocation(g_program, "camPos"), 1, glm::value_ptr(g_camera.getPosition()));
+    // Pass the camera position to the GPU program
+    const glm::vec3 camPosition = g_camera.getPosition();
+    glUniform3f(glGetUniformLocation(g_program, "camPos"), camPosition[0], camPosition[1], camPosition[2]);
 
     g_sphereMesh->render(); // Render the sphere mesh
 }

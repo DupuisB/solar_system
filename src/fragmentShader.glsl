@@ -1,29 +1,20 @@
 #version 330 core
 
 uniform vec3 camPos; // Camera position
-in vec3 fPosition; // Fragment position
-in vec3 fNormal; // Fragment normal
-out vec4 FragColor; // Output color
+in vec3 fPosition;
+in vec3 fNormal;
+
+out vec4 color; // shader output: color of this fragment
 
 void main() {
-	vec3 n = normalize(fNormal);
-	vec3 l = normalize(vec3(1.0, 1.0, 0.0)); // Light direction vector (hard-coded just for now)
-	vec3 v = normalize(camPos - fPosition); // View vector
-	vec3 r = reflect(-l, n); // Reflection vector
+        vec3 n = normalize(fNormal);
+        vec3 l = normalize(vec3(1.0, 1.0, 0.0)); // Light direction (hardcoded)
+        vec3 v = normalize(camPos - fPosition); // View direction
+        vec3 r = reflect(-l, n); // Reflected light direction
 
-	// Ambient color
-	vec3 ambient = vec3(0.1, 0.1, 0.1); // Ambient color (can be adjusted)
+        vec3 ambient = vec3(0.1, 0.1, 0.1); // Ambient light
+        vec3 diffuse = vec3(0.5, 0.5, 0.5) * max(dot(n, l), 0.0); // Diffuse light
+        vec3 specular = vec3(0.5, 0.5, 0.5) * pow(max(dot(r, v), 0.0), 32); // Specular light
 
-	// Diffuse lighting
-	float diff = max(dot(n, l), 0.0);
-	vec3 diffuse = diff * vec3(1.0, 1.0, 1.0); // Diffuse color (can be adjusted)
-
-	// Specular lighting
-	float spec = pow(max(dot(v, r), 0.0), 32.0); // Shininess factor (32.0 can be adjusted)
-	vec3 specular = spec * vec3(1.0, 1.0, 1.0); // Specular color (can be adjusted)
-
-	// Combine all components
-	vec3 color = ambient + diffuse + specular;
-
-	FragColor = vec4(color, 1.0); // Set the fragment color
+        color = vec4(ambient + diffuse + specular, 1.0); // Final color (RGBA from RGB)
 }
