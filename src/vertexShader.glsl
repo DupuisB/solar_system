@@ -1,11 +1,29 @@
 #version 330 core
 
-layout(location = 0) in vec3 aPos; // Position attribute
-layout(location = 1) in vec3 vNormal; // Normal attribute
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNormal;
+layout(location = 2) in vec2 aTexCoord;
 
-out vec3 fNormal; // Output normal to the fragment shader
+uniform mat4 modelMat;
+uniform mat4 viewMat;
+uniform mat4 projMat;
 
-void main() {
-    gl_Position = vec4(aPos, 1.0); // Set the position of the vertex
-    fNormal = vNormal; // Pass the normal to the fragment shader
+out vec3 fPosition; // Fragment position in world space
+out vec3 fNormal;   // Fragment normal in world space
+out vec2 fTexCoord; // Fragment texture coordinate
+
+void main()
+{
+    // Transform the vertex position to world space
+    vec4 worldPosition = modelMat * vec4(aPos, 1.0);
+    fPosition = worldPosition.xyz;
+
+    // Transform the normal to world space
+    fNormal = mat3(transpose(inverse(modelMat))) * aNormal;
+
+    // Pass the texture coordinate to the fragment shader
+    fTexCoord = aTexCoord;
+
+    // Transform the vertex position to clip space
+    gl_Position = projMat * viewMat * worldPosition;
 }

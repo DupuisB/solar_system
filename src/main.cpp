@@ -54,6 +54,12 @@ const static float kSizeMoon = 0.25;
 const static float kRadOrbitEarth = 10;
 const static float kRadOrbitMoon = 2;
 
+const static float earthRotationPeriod = 1;
+const static float earthOrbitPeriod = earthRotationPeriod * 2;
+const static float earthTilt = 23.5;
+const static float moonRotationPeriod = earthRotationPeriod / 2;
+const static float moonOrbitPeriod = moonRotationPeriod;
+
 // Window parameters
 GLFWwindow *g_window = nullptr;
 
@@ -72,6 +78,14 @@ std::vector<float> g_vertexPositions;
 std::vector<float> g_vertexColors;
 // All triangle indices packed in one array [v00, v01, v02, v10, v11, v12, ...] with vij the index of j-th vertex of the i-th triangle
 std::vector<unsigned int> g_triangleIndices;
+
+glm::mat4 g_sun = glm::scale(glm::mat4(1.0f), glm::vec3(kSizeSun));
+glm::mat4 g_earth = glm::translate(glm::mat4(1.0f), glm::vec3(kRadOrbitEarth, 0.0f, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(kSizeEarth));
+glm::mat4 g_moon = glm::translate(g_earth, glm::vec3(kRadOrbitMoon, 0.0f, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(kSizeMoon));
+
+glm::vec3 sunColor = glm::vec3(1.0f, 1.0f, 0.0f); // Yellowish
+glm::vec3 earthColor = glm::vec3(0.0f, 1.0f, 0.0f); // Greenish
+glm::vec3 moonColor = glm::vec3(0.0f, 0.0f, 1.0f); // Blueish
 
 // Basic camera model
 class Camera
@@ -109,27 +123,36 @@ private:
 
 Camera g_camera;
 
-GLuint loadTextureFromFileToGPU(const std::string &filename)
-{
-    int width, height, numComponents;
+// main.cpp ...
+GLuint loadTextureFromFileToGPU(const std::string &filename) {
     // Loading the image in CPU memory using stb_image
-    unsigned char *data = stbi_load(
-        filename.c_str(),
-        &width, &height,
-        &numComponents, // 1 for a 8 bit grey-scale image, 3 for 24bits RGB image, 4 for 32bits RGBA image
-        0);
+    int width, height, numComponents;
+    unsigned char *data = stbi_load(filename.c_str(), &width, &height, &numComponents, 0);
 
-    GLuint texID;
-    // TODO: create a texture and upload the image data in GPU memory using
-    // glGenTextures, glBindTexture, glTexParameteri, and glTexImage2D
+    if (data == nullptr) {
+        std::cerr << "Error: texture " << filename << " not found" << std::endl;
+        return 0;
+    }
+
+    std::cout << "Loaded texture " << filename << " with width=" << width << " height=" << height << " numComponents=" << numComponents << std::endl;
+
+    GLuint texID; // OpenGL texture identifier
+    glGenTextures(1, &texID); // generate an OpenGL texture container
+    glBindTexture(GL_TEXTURE_2D, texID); // activate the texture
+    // Setup the texture filtering option and repeat mode; check www.opengl.org for details.
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    // Fill the GPU texture with the data stored in the CPU image
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
 
     // Free useless CPU memory
     stbi_image_free(data);
     glBindTexture(GL_TEXTURE_2D, 0); // unbind the texture
-
     return texID;
-}
-
+    }
 class Mesh {
 public:
     void init() {
@@ -147,6 +170,12 @@ public:
         glBufferData(GL_ARRAY_BUFFER, m_vertexNormals.size() * sizeof(float), m_vertexNormals.data(), GL_STATIC_DRAW);
         glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
         glEnableVertexAttribArray(1);
+
+        glGenBuffers(1, &m_texCoordVbo);
+        glBindBuffer(GL_ARRAY_BUFFER, m_texCoordVbo);
+        glBufferData(GL_ARRAY_BUFFER, m_vertexTexCoords.size() * sizeof(float), m_vertexTexCoords.data(), GL_STATIC_DRAW);
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+        glEnableVertexAttribArray(2);
 
         glGenBuffers(1, &m_ibo);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ibo);
@@ -187,6 +216,12 @@ public:
                 mesh->m_vertexNormals.push_back(x);
                 mesh->m_vertexNormals.push_back(y);
                 mesh->m_vertexNormals.push_back(z);
+
+                // Add texture coordinates
+                float u = static_cast<float>(j) / resolution;
+                float v = static_cast<float>(i) / resolution;
+                mesh->m_vertexTexCoords.push_back(u);
+                mesh->m_vertexTexCoords.push_back(v);
             }
         }
         
@@ -216,6 +251,8 @@ private:
     std::vector<float> m_vertexPositions;
     std::vector<float> m_vertexNormals;
     std::vector<unsigned int> m_triangleIndices;
+    std::vector<float> m_vertexTexCoords;
+    GLuint m_texCoordVbo = 0;
     GLuint m_vao = 0;
     GLuint m_posVbo = 0;
     GLuint m_normalVbo = 0;
@@ -349,7 +386,7 @@ void initGPUprogram()
 // Define your mesh(es) in the CPU memory
 void initCPUgeometry()
 {
-    g_sphereMesh = g_sphereMesh->genSphere(512);
+    g_sphereMesh = g_sphereMesh->genSphere(32);
 }
 
 void initGPUgeometry()
@@ -363,9 +400,19 @@ void initCamera()
     glfwGetWindowSize(g_window, &width, &height);
     g_camera.setAspectRatio(static_cast<float>(width) / static_cast<float>(height));
 
-    g_camera.setPosition(glm::vec3(0.0, 0.0, 3.0));
+    // Set the camera position to capture all three planets
+    g_camera.setPosition(glm::vec3(0.0, 20.0, 30.0)); // Adjust as needed
+
+    // Set near and far planes
     g_camera.setNear(0.1);
     g_camera.setFar(80.1);
+}
+
+GLuint sunTexture, earthTexture, moonTexture;
+
+void initTextures() {
+    earthTexture = loadTextureFromFileToGPU("./media/earth.jpg");
+    moonTexture = loadTextureFromFileToGPU("./media/moon.jpg");
 }
 
 void init()
@@ -376,6 +423,10 @@ void init()
     initGPUprogram();
     initGPUgeometry();
     initCamera();
+    initTextures();
+
+    // Initialize time
+    glfwSetTime(0.0);
 }
 
 void clear()
@@ -386,28 +437,54 @@ void clear()
     glfwTerminate();
 }
 
-// The main rendering call
 void render()
 {
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // Erase the color and z buffers.
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     const glm::mat4 viewMatrix = g_camera.computeViewMatrix();
     const glm::mat4 projMatrix = g_camera.computeProjectionMatrix();
 
-    glUniformMatrix4fv(glGetUniformLocation(g_program, "viewMat"), 1, GL_FALSE, glm::value_ptr(viewMatrix)); // compute the view matrix of the camera and pass it to the GPU program
-    glUniformMatrix4fv(glGetUniformLocation(g_program, "projMat"), 1, GL_FALSE, glm::value_ptr(projMatrix)); // compute the projection matrix of the camera and pass it to the GPU program
+    glUniformMatrix4fv(glGetUniformLocation(g_program, "viewMat"), 1, GL_FALSE, glm::value_ptr(viewMatrix));
+    glUniformMatrix4fv(glGetUniformLocation(g_program, "projMat"), 1, GL_FALSE, glm::value_ptr(projMatrix));
 
-    // Pass the camera position to the GPU program
     const glm::vec3 camPosition = g_camera.getPosition();
     glUniform3f(glGetUniformLocation(g_program, "camPos"), camPosition[0], camPosition[1], camPosition[2]);
 
-    g_sphereMesh->render(); // Render the sphere mesh
+    // Set the light position (sun's position)
+    glm::vec3 lightPosition = glm::vec3(0.0f, 0.0f, 0.0f); // Sun is at the origin
+    glUniform3fv(glGetUniformLocation(g_program, "lightPos"), 1, glm::value_ptr(lightPosition));
+
+    // Render the sun without texture
+    glUniformMatrix4fv(glGetUniformLocation(g_program, "modelMat"), 1, GL_FALSE, glm::value_ptr(g_sun));
+    glUniform3fv(glGetUniformLocation(g_program, "objectColor"), 1, glm::value_ptr(sunColor));
+    g_sphereMesh->render();
+
+    // Render the earth
+    glBindTexture(GL_TEXTURE_2D, earthTexture);
+    glUniformMatrix4fv(glGetUniformLocation(g_program, "modelMat"), 1, GL_FALSE, glm::value_ptr(g_earth));
+    glUniform3fv(glGetUniformLocation(g_program, "objectColor"), 1, glm::value_ptr(earthColor));
+    g_sphereMesh->render();
+
+    // Render the moon
+    glBindTexture(GL_TEXTURE_2D, moonTexture);
+    glUniformMatrix4fv(glGetUniformLocation(g_program, "modelMat"), 1, GL_FALSE, glm::value_ptr(g_moon));
+    glUniform3fv(glGetUniformLocation(g_program, "objectColor"), 1, glm::value_ptr(moonColor));
+    g_sphereMesh->render();
 }
 
 // Update any accessible variable based on the current time
 void update(const float currentTimeInSec)
 {
-    // std::cout << currentTimeInSec << std::endl;
+    // Get the current time in seconds
+    float currentTimeGLFW = static_cast<float>(glfwGetTime());
+
+    // Update the earth position
+    float earthAngle = currentTimeGLFW / earthOrbitPeriod * 2 * M_PI;
+    g_earth = glm::translate(glm::mat4(1.0f), glm::vec3(kRadOrbitEarth * cos(earthAngle), 0.0f, kRadOrbitEarth * sin(earthAngle))) * glm::rotate(glm::mat4(1.0f), earthAngle, glm::vec3(0.0f, 1.0f, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(kSizeEarth));
+
+    // Update the moon position
+    float moonAngle = currentTimeInSec / moonRotationPeriod * 2 * M_PI;
+    g_moon = glm::translate(g_earth, glm::vec3(kRadOrbitMoon * cos(moonAngle), 0.0f, kRadOrbitMoon * sin(moonAngle))) * glm::rotate(glm::mat4(1.0f), moonAngle, glm::vec3(0.0f, 1.0f, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(kSizeMoon));
 }
 
 int main(int argc, char **argv)
