@@ -446,22 +446,21 @@ void render()
     glUniformMatrix4fv(glGetUniformLocation(g_program, "modelMat"), 1, GL_FALSE, glm::value_ptr(g_sun));
     glUniform3fv(glGetUniformLocation(g_program, "objectColor"), 1, glm::value_ptr(sunColor));
     glUniform1i(glGetUniformLocation(g_program, "useTexture"), GL_FALSE);
+    glUniform1i(glGetUniformLocation(g_program, "isSun"), GL_TRUE); // Set isSun to true
     g_sphereMesh->render();
 
     // Render the earth
     glBindTexture(GL_TEXTURE_2D, earthTexture);
-    GLenum error = glGetError();
-    if (error != GL_NO_ERROR) {
-        std::cerr << "Error binding texture: " << error << std::endl;
-    }
     glUniformMatrix4fv(glGetUniformLocation(g_program, "modelMat"), 1, GL_FALSE, glm::value_ptr(g_earth));
     glUniform1i(glGetUniformLocation(g_program, "useTexture"), GL_TRUE);
+    glUniform1i(glGetUniformLocation(g_program, "isSun"), GL_FALSE); // Set isSun to false
     g_sphereMesh->render();
 
     // Render the moon
     glBindTexture(GL_TEXTURE_2D, moonTexture);
     glUniformMatrix4fv(glGetUniformLocation(g_program, "modelMat"), 1, GL_FALSE, glm::value_ptr(g_moon));
     glUniform1i(glGetUniformLocation(g_program, "useTexture"), GL_TRUE);
+    glUniform1i(glGetUniformLocation(g_program, "isSun"), GL_FALSE); // Set isSun to false
     g_sphereMesh->render();
 }
 
