@@ -79,8 +79,6 @@ glm::mat4 g_earth = glm::translate(glm::mat4(1.0f), glm::vec3(kRadOrbitEarth, 0.
 glm::mat4 g_moon = glm::translate(g_earth, glm::vec3(kRadOrbitMoon, 0.0f, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(kSizeMoon));
 
 glm::vec3 sunColor = glm::vec3(1.0f, 1.0f, 0.0f); // Yellowish
-glm::vec3 earthColor = glm::vec3(0.0f, 1.0f, 0.0f); // Greenish
-glm::vec3 moonColor = glm::vec3(0.0f, 0.0f, 1.0f); // Blueish
 
 // Basic camera model
 class Camera
@@ -139,10 +137,11 @@ GLuint loadTextureFromFileToGPU(const std::string &filename) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT); // Repeat the texture outside the [0, 1] range (horizontal)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT); // Repeat the texture outside the [0, 1] range (vertical)
 
+
     // Fill the GPU texture with the data stored in the CPU image
     // Parameters: texture target, mipmap level, internal format, width, height, border, format, type, data
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-
+    
     // Free useless CPU memory
     stbi_image_free(data);
     glBindTexture(GL_TEXTURE_2D, 0); // unbind the texture (now the active texture is 0)
@@ -214,32 +213,22 @@ public:
                 mesh->m_vertexNormals.push_back(z);
 
                 // Add texture coordinates
-                float u = static_cast<float>(j) / resolution;
-                float v = static_cast<float>(i) / resolution;
-                mesh->m_vertexTexCoords.push_back(u);
-                mesh->m_vertexTexCoords.push_back(v);
+                mesh->m_vertexTexCoords.push_back(static_cast<float>(j) / resolution);
+                mesh->m_vertexTexCoords.push_back(static_cast<float>(i) / resolution);
+
+                // Add triangle indices
+                if (i < resolution && j < resolution) {
+                    size_t idx = i * (resolution + 1) + j;
+                    mesh->m_triangleIndices.push_back(idx);
+                    mesh->m_triangleIndices.push_back(idx + resolution + 1);
+                    mesh->m_triangleIndices.push_back(idx + resolution + 2);
+
+                    mesh->m_triangleIndices.push_back(idx);
+                    mesh->m_triangleIndices.push_back(idx + resolution + 2);
+                    mesh->m_triangleIndices.push_back(idx + 1);
+                }
             }
         }
-        
-        // Generate triangle indices
-        for (size_t i = 0; i < resolution; ++i) {
-            for (size_t j = 0; j < resolution; ++j) {
-                // Calculate indices for the four corners of each grid cell
-                unsigned int first = i * (resolution + 1) + j;
-                unsigned int second = first + resolution + 1;
-
-                // First triangle of the quad
-                mesh->m_triangleIndices.push_back(first);
-                mesh->m_triangleIndices.push_back(second);
-                mesh->m_triangleIndices.push_back(first + 1);
-
-                // Second triangle of the quad
-                mesh->m_triangleIndices.push_back(second);
-                mesh->m_triangleIndices.push_back(second + 1);
-                mesh->m_triangleIndices.push_back(first + 1);
-            }
-        }
-
         return mesh;
     }
 
@@ -373,10 +362,12 @@ void initGPUprogram()
     g_program = glCreateProgram(); // Create a GPU program, i.e., two central shaders of the graphics pipeline
     loadShader(g_program, GL_VERTEX_SHADER, "vertexShader.glsl"); // Load the vertex shader
     loadShader(g_program, GL_FRAGMENT_SHADER, "fragmentShader.glsl"); // Load the fragment shader
-    glLinkProgram(g_program); // The main GPU program is ready to be handle streams of polygons
+    glLinkProgram(g_program); // The main GPU program is ready to handle streams of polygons
 
-    glUseProgram(g_program);
+    glUseProgram(g_program); // Activate the GPU program
     // TODO: set shader variables, textures, etc.
+
+
 }
 
 // Define your mesh(es) in the CPU memory
@@ -404,7 +395,7 @@ void initCamera()
     g_camera.setFar(80.1);
 }
 
-GLuint sunTexture, earthTexture, moonTexture;
+GLuint earthTexture, moonTexture;
 
 void initTextures() {
     earthTexture = loadTextureFromFileToGPU("./media/earth.jpg");
@@ -454,18 +445,23 @@ void render()
     // Render the sun (no texture)
     glUniformMatrix4fv(glGetUniformLocation(g_program, "modelMat"), 1, GL_FALSE, glm::value_ptr(g_sun));
     glUniform3fv(glGetUniformLocation(g_program, "objectColor"), 1, glm::value_ptr(sunColor));
+    glUniform1i(glGetUniformLocation(g_program, "useTexture"), GL_FALSE);
     g_sphereMesh->render();
 
     // Render the earth
     glBindTexture(GL_TEXTURE_2D, earthTexture);
+    GLenum error = glGetError();
+    if (error != GL_NO_ERROR) {
+        std::cerr << "Error binding texture: " << error << std::endl;
+    }
     glUniformMatrix4fv(glGetUniformLocation(g_program, "modelMat"), 1, GL_FALSE, glm::value_ptr(g_earth));
-    glUniform3fv(glGetUniformLocation(g_program, "objectColor"), 1, glm::value_ptr(earthColor));
+    glUniform1i(glGetUniformLocation(g_program, "useTexture"), GL_TRUE);
     g_sphereMesh->render();
 
     // Render the moon
     glBindTexture(GL_TEXTURE_2D, moonTexture);
     glUniformMatrix4fv(glGetUniformLocation(g_program, "modelMat"), 1, GL_FALSE, glm::value_ptr(g_moon));
-    glUniform3fv(glGetUniformLocation(g_program, "objectColor"), 1, glm::value_ptr(moonColor));
+    glUniform1i(glGetUniformLocation(g_program, "useTexture"), GL_TRUE);
     g_sphereMesh->render();
 }
 
@@ -486,13 +482,13 @@ void update(const float currentTimeInSec)
 
 int main(int argc, char **argv)
 {
-    init(); // Your initialization code (user interface, OpenGL states, scene with geometry, material, lights, etc)
-    while (!glfwWindowShouldClose(g_window))
+    init();                                         // Your initialization code (user interface, OpenGL states, scene with geometry, material, lights, etc)
+    while (!glfwWindowShouldClose(g_window))        // The rendering loop
     {
-        update(static_cast<float>(glfwGetTime()));
-        render();
-        glfwSwapBuffers(g_window);
-        glfwPollEvents();
+        update(static_cast<float>(glfwGetTime()));  // Update function
+        render();                                   // Rendering function
+        glfwSwapBuffers(g_window);                  // Swap the front and back buffers (avoid flickering)
+        glfwPollEvents();                           // Process the events (keyboard, mouse, etc)
     }
     clear();
     return EXIT_SUCCESS;
