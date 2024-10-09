@@ -6,6 +6,7 @@ uniform sampler2D texture1; // Texture sampler
 uniform vec3 objectColor; // Color of the object (planet)
 uniform bool useTexture; // Flag to determine whether to use texture
 uniform bool isSun; // Flag to determine if the object is the sun
+uniform bool isSky; // Flag to determine if the object is the skybox
 
 in vec3 fPosition;
 in vec3 fNormal;
@@ -14,6 +15,12 @@ in vec2 fTexCoord;
 out vec4 color; // shader output: color of this fragment
 
 void main() {
+    if (isSky) {
+        // Apply the sky texture directly
+        FragColor = texture(texture1, TexCoord);
+        return;
+    }
+
     vec3 n = normalize(fNormal);
     vec3 l = normalize(lightPos - fPosition); // Light direction from light source to fragment
     vec3 v = normalize(camPos - fPosition); // View direction

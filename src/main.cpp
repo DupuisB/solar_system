@@ -29,8 +29,6 @@
 // What is a VAO: stores the state of the VBOs (position, color, etc.)
 //------------------------------------------------------------------------------
 
-
-// https://assetstore.unity.com/packages/3d/environments/sci-fi/real-stars-skybox-lite-116333
 #define _USE_MATH_DEFINES
 
 #include <glad/gl.h>
@@ -365,11 +363,6 @@ void initGPUprogram()
     loadShader(g_program, GL_VERTEX_SHADER, "vertexShader.glsl"); // Load the vertex shader
     loadShader(g_program, GL_FRAGMENT_SHADER, "fragmentShader.glsl"); // Load the fragment shader
     glLinkProgram(g_program); // The main GPU program is ready to handle streams of polygons
-
-    glUseProgram(g_program); // Activate the GPU program
-    // TODO: set shader variables, textures, etc.
-
-
 }
 
 // Define your mesh(es) in the CPU memory
@@ -426,7 +419,8 @@ void clear()
     glfwTerminate();
 }
 
-void render() {
+void render()
+{
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     const glm::mat4 viewMatrix = g_camera.computeViewMatrix();
@@ -464,6 +458,7 @@ void render() {
     glUniform1i(glGetUniformLocation(g_program, "isSun"), GL_FALSE); // Set isSun to false
     g_sphereMesh->render();
 }
+
 // Update any accessible variable based on the current time
 void update(const float currentTimeInSec)
 {
