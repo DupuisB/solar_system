@@ -1,3 +1,4 @@
+// Responsible for calculating the color of each fragment (pixel) of the object.
 #version 330 core
 
 uniform vec3 camPos; // Camera position

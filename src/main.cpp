@@ -25,6 +25,8 @@
 // The scene is viewed from a camera that can be moved around the scene.
 //
 // Libraries: OpenGL, GLFW, GLAD, GLM, STB
+// What is a VBO: stores vertices in the GPU memory
+// What is a VAO: stores the state of the VBOs (position, color, etc.)
 //------------------------------------------------------------------------------
 
 #define _USE_MATH_DEFINES
@@ -72,13 +74,6 @@ GLuint g_posVbo = 0;
 GLuint g_colVbo = 0;
 GLuint g_ibo = 0;
 
-// All vertex positions packed in one array [x0, y0, z0, x1, y1, z1, ...]
-std::vector<float> g_vertexPositions;
-// All colors packed in one array [r0, g0, b0, r1, g1, b1, ...]
-std::vector<float> g_vertexColors;
-// All triangle indices packed in one array [v00, v01, v02, v10, v11, v12, ...] with vij the index of j-th vertex of the i-th triangle
-std::vector<unsigned int> g_triangleIndices;
-
 glm::mat4 g_sun = glm::scale(glm::mat4(1.0f), glm::vec3(kSizeSun));
 glm::mat4 g_earth = glm::translate(glm::mat4(1.0f), glm::vec3(kRadOrbitEarth, 0.0f, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(kSizeEarth));
 glm::mat4 g_moon = glm::translate(g_earth, glm::vec3(kRadOrbitMoon, 0.0f, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(kSizeMoon));
@@ -123,7 +118,6 @@ private:
 
 Camera g_camera;
 
-// main.cpp ...
 GLuint loadTextureFromFileToGPU(const std::string &filename) {
     // Loading the image in CPU memory using stb_image
     int width, height, numComponents;
@@ -137,33 +131,35 @@ GLuint loadTextureFromFileToGPU(const std::string &filename) {
     std::cout << "Loaded texture " << filename << " with width=" << width << " height=" << height << " numComponents=" << numComponents << std::endl;
 
     GLuint texID; // OpenGL texture identifier
-    glGenTextures(1, &texID); // generate an OpenGL texture container
-    glBindTexture(GL_TEXTURE_2D, texID); // activate the texture
-    // Setup the texture filtering option and repeat mode; check www.opengl.org for details.
+    glGenTextures(1, &texID); // generate a texture object
+    glBindTexture(GL_TEXTURE_2D, texID); // bind the texture object to the 2D texture target (now active texture)
 
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR); // Linear interpolation for magnifying the texture
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); // Linear interpolation for minifying the texture
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT); // Repeat the texture outside the [0, 1] range (horizontal)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT); // Repeat the texture outside the [0, 1] range (vertical)
+
     // Fill the GPU texture with the data stored in the CPU image
+    // Parameters: texture target, mipmap level, internal format, width, height, border, format, type, data
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
 
     // Free useless CPU memory
     stbi_image_free(data);
-    glBindTexture(GL_TEXTURE_2D, 0); // unbind the texture
-    return texID;
-    }
+    glBindTexture(GL_TEXTURE_2D, 0); // unbind the texture (now the active texture is 0)
+    return texID; // return the texture id (useful to use it later)
+}
+
 class Mesh {
 public:
     void init() {
-        glGenVertexArrays(1, &m_vao);
-        glBindVertexArray(m_vao);
+        glGenVertexArrays(1, &m_vao); // Generate 1 vertex array object (VAO)
+        glBindVertexArray(m_vao); // Bind the VAO to the current context (now the active VAO)
 
-        glGenBuffers(1, &m_posVbo);
-        glBindBuffer(GL_ARRAY_BUFFER, m_posVbo);
-        glBufferData(GL_ARRAY_BUFFER, m_vertexPositions.size() * sizeof(float), m_vertexPositions.data(), GL_STATIC_DRAW);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
-        glEnableVertexAttribArray(0);
+        glGenBuffers(1, &m_posVbo); // Generate 1 vertex buffer object (VBO)
+        glBindBuffer(GL_ARRAY_BUFFER, m_posVbo); // Bind the VBO to the current context (now the active VBO)
+        glBufferData(GL_ARRAY_BUFFER, m_vertexPositions.size() * sizeof(float), m_vertexPositions.data(), GL_STATIC_DRAW); // Fill the VBO with the vertex data
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr); // Define the layout of the vertex data in the VBO (attrib index, number of components, type, normalized, stride, pointer)
+        glEnableVertexAttribArray(0); // Enable the attribute at index 0, now accessible in the vertex shader (layout(location = 0))
 
         glGenBuffers(1, &m_normalVbo);
         glBindBuffer(GL_ARRAY_BUFFER, m_normalVbo);
@@ -181,13 +177,13 @@ public:
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ibo);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, m_triangleIndices.size() * sizeof(unsigned int), m_triangleIndices.data(), GL_STATIC_DRAW);
 
-        glBindVertexArray(0);
+        glBindVertexArray(0); // Unbind the VAO
     }
 
     void render() {
-        glBindVertexArray(m_vao);
-        glDrawElements(GL_TRIANGLES, m_triangleIndices.size(), GL_UNSIGNED_INT, 0);
-        glBindVertexArray(0);
+        glBindVertexArray(m_vao); // Bind the VAO to the current context (now the active VAO)
+        glDrawElements(GL_TRIANGLES, m_triangleIndices.size(), GL_UNSIGNED_INT, 0); // Draw the triangles using the indices in the IBO (mode, count, type, indices)
+        glBindVertexArray(0); // Unbind the VAO
     }
 
     // Implementation of genSphere
@@ -248,10 +244,10 @@ public:
     }
 
 private:
-    std::vector<float> m_vertexPositions;
-    std::vector<float> m_vertexNormals;
-    std::vector<unsigned int> m_triangleIndices;
-    std::vector<float> m_vertexTexCoords;
+    std::vector<float> m_vertexPositions; // (VBO)
+    std::vector<float> m_vertexNormals; // (VBO)
+    std::vector<unsigned int> m_triangleIndices; // (IBO)
+    std::vector<float> m_vertexTexCoords; // (VBO)
     GLuint m_texCoordVbo = 0;
     GLuint m_vao = 0;
     GLuint m_posVbo = 0;
@@ -259,7 +255,7 @@ private:
     GLuint m_ibo = 0;
 };
 
-std::shared_ptr<Mesh> g_sphereMesh = std::make_shared<Mesh>();
+std::shared_ptr<Mesh> g_sphereMesh = std::make_shared<Mesh>(); // Sphere mesh
 
 // Executed each time the window is resized. Adjust the aspect ratio and the rendering viewport to the current window.
 void windowSizeCallback(GLFWwindow *window, int width, int height)
@@ -302,11 +298,11 @@ void initGLFW()
     }
 
     // Before creating the window, set some option flags
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_RESIZABLE, GL_TRUE);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3); // Request OpenGL version 3.3
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3); // Request OpenGL version 3.3
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // Avoid using deprecated functionality
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE); // Use the core profile (more modern functions)
+    glfwWindowHint(GLFW_RESIZABLE, GL_TRUE); // The window is resizable
 
     // Create the window
     g_window = glfwCreateWindow(
@@ -321,9 +317,9 @@ void initGLFW()
     }
 
     // Load the OpenGL context in the GLFW window using GLAD OpenGL wrangler
-    glfwMakeContextCurrent(g_window);
-    glfwSetWindowSizeCallback(g_window, windowSizeCallback);
-    glfwSetKeyCallback(g_window, keyCallback);
+    glfwMakeContextCurrent(g_window); // Make the created window's context current
+    glfwSetWindowSizeCallback(g_window, windowSizeCallback); // Set the callback for window resizing 
+    glfwSetKeyCallback(g_window, keyCallback); // Set the callback for key entering
 }
 
 void initOpenGL()
@@ -368,15 +364,15 @@ void loadShader(GLuint program, GLenum type, const std::string &shaderFilename)
         glGetShaderInfoLog(shader, 512, NULL, infoLog);
         std::cout << "ERROR in compiling " << shaderFilename << "\n\t" << infoLog << std::endl;
     }
-    glAttachShader(program, shader);
-    glDeleteShader(shader);
+    glAttachShader(program, shader); // Attach the shader to the program
+    glDeleteShader(shader); // The shader is now in the program, it can be deleted
 }
 
 void initGPUprogram()
 {
     g_program = glCreateProgram(); // Create a GPU program, i.e., two central shaders of the graphics pipeline
-    loadShader(g_program, GL_VERTEX_SHADER, "vertexShader.glsl");
-    loadShader(g_program, GL_FRAGMENT_SHADER, "fragmentShader.glsl");
+    loadShader(g_program, GL_VERTEX_SHADER, "vertexShader.glsl"); // Load the vertex shader
+    loadShader(g_program, GL_FRAGMENT_SHADER, "fragmentShader.glsl"); // Load the fragment shader
     glLinkProgram(g_program); // The main GPU program is ready to be handle streams of polygons
 
     glUseProgram(g_program);
@@ -444,6 +440,7 @@ void render()
     const glm::mat4 viewMatrix = g_camera.computeViewMatrix();
     const glm::mat4 projMatrix = g_camera.computeProjectionMatrix();
 
+    // Params: program, location, count, transpose, value
     glUniformMatrix4fv(glGetUniformLocation(g_program, "viewMat"), 1, GL_FALSE, glm::value_ptr(viewMatrix));
     glUniformMatrix4fv(glGetUniformLocation(g_program, "projMat"), 1, GL_FALSE, glm::value_ptr(projMatrix));
 
@@ -454,7 +451,7 @@ void render()
     glm::vec3 lightPosition = glm::vec3(0.0f, 0.0f, 0.0f); // Sun is at the origin
     glUniform3fv(glGetUniformLocation(g_program, "lightPos"), 1, glm::value_ptr(lightPosition));
 
-    // Render the sun without texture
+    // Render the sun (no texture)
     glUniformMatrix4fv(glGetUniformLocation(g_program, "modelMat"), 1, GL_FALSE, glm::value_ptr(g_sun));
     glUniform3fv(glGetUniformLocation(g_program, "objectColor"), 1, glm::value_ptr(sunColor));
     g_sphereMesh->render();

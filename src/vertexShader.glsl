@@ -1,3 +1,4 @@
+// Processes the vertex data: from local space to clip space. Next stage is the rasterizer, then the fragment shader.
 #version 330 core
 
 layout(location = 0) in vec3 aPos;
