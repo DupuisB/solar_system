@@ -29,6 +29,8 @@
 // What is a VAO: stores the state of the VBOs (position, color, etc.)
 //------------------------------------------------------------------------------
 
+
+// https://assetstore.unity.com/packages/3d/environments/sci-fi/real-stars-skybox-lite-116333
 #define _USE_MATH_DEFINES
 
 #include <glad/gl.h>
@@ -424,8 +426,7 @@ void clear()
     glfwTerminate();
 }
 
-void render()
-{
+void render() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     const glm::mat4 viewMatrix = g_camera.computeViewMatrix();
@@ -463,7 +464,6 @@ void render()
     glUniform1i(glGetUniformLocation(g_program, "isSun"), GL_FALSE); // Set isSun to false
     g_sphereMesh->render();
 }
-
 // Update any accessible variable based on the current time
 void update(const float currentTimeInSec)
 {

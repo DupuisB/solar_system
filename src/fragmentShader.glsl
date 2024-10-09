@@ -30,8 +30,8 @@ void main() {
 
     vec3 lighting;
     if (isSun) {
-        // Sun is lit by only its own ambient lighting
-        lighting = ambient;
+        lighting = ambient; // Sun is lit by only its own ambient lighting
+
     } else {
         vec3 diffuse = baseColor * vec3(1.0, 1.0, 1.0) * max(dot(n, l), 0.0); // Diffuse light
         vec3 specular = vec3(0.5, 0.5, 0.5) * pow(max(dot(r, v), 0.0), 32); // Specular light
