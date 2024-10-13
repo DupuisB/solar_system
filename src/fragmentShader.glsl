@@ -26,13 +26,12 @@ void main() {
         baseColor = objectColor;
     }
 
-    vec3 ambient = baseColor * vec3(0.5, 0.5, 0.5); // Ambient light
-
     vec3 lighting;
     if (isSun) {
-        lighting = ambient; // Sun is lit by only its own ambient lighting
+        lighting = vec3(0.8, 0.8, 0.8); // Sun is lit by only its own ambient lighting
 
     } else {
+        vec3 ambient = baseColor * vec3(0.5, 0.5, 0.5); // Ambient light
         vec3 diffuse = baseColor * vec3(1.0, 1.0, 1.0) * max(dot(n, l), 0.0); // Diffuse light
         vec3 specular = vec3(0.5, 0.5, 0.5) * pow(max(dot(r, v), 0.0), 32); // Specular light
         lighting = ambient + diffuse + specular; // Combine lighting components
