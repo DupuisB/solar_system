@@ -31,7 +31,6 @@
 // What is a VAO: stores the state of the VBOs (position, color, etc.)
 //------------------------------------------------------------------------------
 
-// Include standard headers
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -60,10 +59,8 @@ const static float kSizeMoon = 0.25;
 const static float kRadOrbitEarth = 10;
 const static float kRadOrbitMoon = 2;
 
-const static float earthRotationPeriod = 1;
-const static float earthOrbitPeriod = earthRotationPeriod * 2;
-const static float moonRotationPeriod = earthRotationPeriod / 2;
-const static float moonOrbitPeriod = moonRotationPeriod;
+const static float earthOrbitPeriod = 4; // Earth's orbit period
+const static float moonOrbitPeriod = 2;  // Moon's orbit period
 
 // Window parameters
 GLFWwindow *g_window = nullptr;
@@ -80,15 +77,13 @@ GLuint g_ibo = 0;
 
 // Matrices for celestial bodies
 glm::mat4 g_sun = glm::scale(glm::mat4(1.0f), glm::vec3(kSizeSun));
-glm::mat4 g_earth = glm::translate(glm::mat4(1.0f), glm::vec3(kRadOrbitEarth, 0.0f, 0.0f)) *
-                    glm::scale(glm::mat4(1.0f), glm::vec3(kSizeEarth));
-glm::mat4 g_moon = glm::translate(g_earth, glm::vec3(kRadOrbitMoon, 0.0f, 0.0f)) *
-                   glm::scale(glm::mat4(1.0f), glm::vec3(kSizeMoon));
+glm::mat4 g_earth = glm::mat4(1.0f);
+glm::mat4 g_moon = glm::mat4(1.0f);
 
 // Sun color
 glm::vec3 sunColor = glm::vec3(1.0f, 1.0f, 0.0f); // Yellowish
 
-// Camera class with movement support
+// Camera class with movement and zoom support
 class Camera {
 public:
     Camera()
@@ -138,6 +133,19 @@ public:
             m_pos -= m_up * velocity;
     }
 
+    void processKeyboardZoom(bool zoomIn, float deltaTime) {
+        float zoomSpeed = 20.0f * deltaTime;
+        if (zoomIn) {
+            m_fov -= zoomSpeed;
+            if (m_fov < 1.0f)
+                m_fov = 1.0f;
+        } else {
+            m_fov += zoomSpeed;
+            if (m_fov > 45.0f)
+                m_fov = 45.0f;
+        }
+    }
+
     void processMouseMovement(float xpos, float ypos) {
         if (m_firstMouse) {
             m_lastX = xpos;
@@ -163,6 +171,14 @@ public:
             m_pitch = -89.0f;
 
         updateCameraVectors();
+    }
+
+    void processMouseScroll(float yoffset) {
+        m_fov -= yoffset;
+        if (m_fov < 1.0f)
+            m_fov = 1.0f;
+        if (m_fov > 45.0f)
+            m_fov = 45.0f;
     }
 
     void updateCameraVectors() {
@@ -233,7 +249,7 @@ GLuint loadTextureFromFileToGPU(const std::string &filename) {
     return texID;
 }
 
-// New function to load cubemap textures
+// Function to load cubemap textures
 GLuint loadCubemap(const std::vector<std::string>& faces) {
     GLuint textureID;
     glGenTextures(1, &textureID);
@@ -431,6 +447,10 @@ GLuint cubemapTexture;
 float deltaTime = 0.0f;	
 float lastFrame = 0.0f;
 
+// Simulation time and state
+float simulationTime = 0.0f; // Custom simulation time
+bool isSimulationFrozen = false; // Simulation frozen state
+
 // Input handling
 bool keys[1024];
 
@@ -448,10 +468,19 @@ void keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods
 
     if (action == GLFW_PRESS && key == GLFW_KEY_ESCAPE)
         glfwSetWindowShouldClose(window, true);
+
+    // Add this block to toggle simulation frozen state
+    if (action == GLFW_PRESS && key == GLFW_KEY_F) { // 'F' key to freeze/unfreeze
+        isSimulationFrozen = !isSimulationFrozen;
+    }
 }
 
 void mouseCallback(GLFWwindow* window, double xpos, double ypos) {
     g_camera.processMouseMovement(static_cast<float>(xpos), static_cast<float>(ypos));
+}
+
+void scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
+    g_camera.processMouseScroll(static_cast<float>(yoffset));
 }
 
 void doMovement() {
@@ -467,6 +496,12 @@ void doMovement() {
         g_camera.processKeyboard(GLFW_KEY_SPACE, deltaTime);
     if (keys[GLFW_KEY_LEFT_SHIFT])
         g_camera.processKeyboard(GLFW_KEY_LEFT_SHIFT, deltaTime);
+
+    // Zoom key handling
+    if (keys[GLFW_KEY_Q])
+        g_camera.processKeyboardZoom(true, deltaTime); // Zoom in
+    if (keys[GLFW_KEY_E])
+        g_camera.processKeyboardZoom(false, deltaTime); // Zoom out
 }
 
 void errorCallback(int error, const char *desc) {
@@ -498,6 +533,7 @@ void initGLFW() {
     glfwSetWindowSizeCallback(g_window, windowSizeCallback);
     glfwSetKeyCallback(g_window, keyCallback);
     glfwSetCursorPosCallback(g_window, mouseCallback);
+    glfwSetScrollCallback(g_window, scrollCallback);
     glfwSetInputMode(g_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 }
 
@@ -586,13 +622,16 @@ void initTextures() {
     earthTexture = loadTextureFromFileToGPU("./media/earth.jpg");
     moonTexture = loadTextureFromFileToGPU("./media/moon.jpg");
 
+    std::string textureFolderPath = "./media/skyboxDefault";
+    std::string textureExtension = ".png";
+
     std::vector<std::string> faces = {
-        "./media/skybox/right.png",
-        "./media/skybox/left.png",
-        "./media/skybox/top.png",
-        "./media/skybox/bottom.png",
-        "./media/skybox/front.png",
-        "./media/skybox/back.png"
+        textureFolderPath + "/right" + textureExtension,
+        textureFolderPath + "/left" + textureExtension,
+        textureFolderPath + "/top" + textureExtension,
+        textureFolderPath + "/bottom" + textureExtension,
+        textureFolderPath + "/front" + textureExtension,
+        textureFolderPath + "/back" + textureExtension
     };
     cubemapTexture = loadCubemap(faces);
 }
@@ -674,22 +713,33 @@ void render() {
 }
 
 void update(const float currentTimeInSec) {
-    float currentTimeGLFW = static_cast<float>(glfwGetTime());
-
-    float earthAngle = currentTimeGLFW / earthOrbitPeriod * 2 * M_PI;
-    g_earth = glm::translate(glm::mat4(1.0f), glm::vec3(kRadOrbitEarth * cos(earthAngle), 0.0f, kRadOrbitEarth * sin(earthAngle))) *
-              glm::rotate(glm::mat4(1.0f), earthAngle, glm::vec3(0.0f, 1.0f, 0.0f)) *
-              glm::scale(glm::mat4(1.0f), glm::vec3(kSizeEarth));
-
-    float moonAngle = currentTimeInSec / moonRotationPeriod * 2 * M_PI;
-    g_moon = glm::translate(g_earth, glm::vec3(kRadOrbitMoon * cos(moonAngle), 0.0f, kRadOrbitMoon * sin(moonAngle))) *
-             glm::rotate(glm::mat4(1.0f), moonAngle, glm::vec3(0.0f, 1.0f, 0.0f)) *
-             glm::scale(glm::mat4(1.0f), glm::vec3(kSizeMoon));
-
     float currentFrame = static_cast<float>(glfwGetTime());
     deltaTime = currentFrame - lastFrame;
     lastFrame = currentFrame;
 
+    // Update simulationTime only if not frozen
+    if (!isSimulationFrozen) {
+        simulationTime += deltaTime;
+    }
+
+    // Calculate orbital angles
+    float earthOrbitAngle = simulationTime / earthOrbitPeriod * 2 * M_PI;
+    float moonOrbitAngle = simulationTime / moonOrbitPeriod * 2 * M_PI;
+
+    // Update earth transformation
+    g_earth = glm::translate(glm::mat4(1.0f), glm::vec3(kRadOrbitEarth * cos(earthOrbitAngle), 0.0f, kRadOrbitEarth * sin(earthOrbitAngle))) *
+              glm::rotate(glm::mat4(1.0f), -earthOrbitAngle, glm::vec3(0.0f, 1.0f, 0.0f)) * // Counter-rotation to keep orientation fixed
+              glm::scale(glm::mat4(1.0f), glm::vec3(kSizeEarth));
+
+    // Update moon transformation
+    glm::mat4 moonLocal = glm::translate(glm::mat4(1.0f), glm::vec3(kRadOrbitMoon * cos(moonOrbitAngle), 0.0f, kRadOrbitMoon * sin(moonOrbitAngle))) *
+                          glm::rotate(glm::mat4(1.0f), -moonOrbitAngle, glm::vec3(0.0f, 1.0f, 0.0f)) * // Counter-rotation
+                          glm::scale(glm::mat4(1.0f), glm::vec3(kSizeMoon));
+
+    // Apply Earth's transformation to the Moon
+    g_moon = g_earth * moonLocal;
+
+    // Process camera movement
     doMovement();
 }
 
