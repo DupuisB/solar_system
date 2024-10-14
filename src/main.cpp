@@ -7,28 +7,30 @@
 //
 // Description: IGR201 Practical; OpenGL and Shaders (DO NOT distribute!)
 //
-// Copyright 2020-2024 Kiwon Um
-//
-// The copyright to the computer program(s) herein is the property of
-// Kiwon Um, Telecom Paris, France. The program(s) may be used and/or
-// copied only with the written permission of Kiwon Um or in accordance
-// with the terms and conditions stipulated in the agreement/contract
-// under which the program(s) have been supplied.
 // ----------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
-// [Project 1] IGR201 Practical: OpenGL and Shaders
-//
-// This assignment aims to create a simple 3D scene with a sun, an earth,
-// and a moon. The sun is at the center of the scene, the earth orbits
-// around the sun, and the moon orbits around the earth. The sun acts as
-// a light source, and the earth and the moon are textured with images
-// of the earth and the moon. The scene is viewed from a camera that can
-// be moved around the scene.
-//
-// Libraries: OpenGL, GLFW, GLAD, GLM, STB
-// What is a VBO: stores vertices in the GPU memory
-// What is a VAO: stores the state of the VBOs (position, color, etc.)
+/*
+[Project 1] IGR201 Practical: OpenGL and Shaders
+
+This assignment creates a simple 3D solar system with the Sun, Earth, and Moon.
+- The Sun is at the center and acts as a light source.
+- The Earth orbits the Sun and rotates around its own axis.
+- The Moon orbits the Earth and rotates around its own axis.
+- Textures are applied to Earth and Moon for realism.
+- A skybox provides a background environment.
+- The camera can be moved and zoomed to observe the scene from different angles.
+
+Libraries Used:
+- OpenGL
+- GLFW
+- GLAD
+- GLM
+- STB Image
+
+What is a VBO: Stores vertices in the GPU memory.
+What is a VAO: Stores the state of VBOs (position, normals, texture coordinates, etc.).
+*/
 //------------------------------------------------------------------------------
 
 #include <iostream>
@@ -52,15 +54,23 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-// Constants for celestial bodies
-const static float kSizeSun = 1;
-const static float kSizeEarth = 0.5;
-const static float kSizeMoon = 0.25;
-const static float kRadOrbitEarth = 10;
-const static float kRadOrbitMoon = 2;
+// Define PI constant
+const float PI = 3.14159265358979323846f;
 
-const static float earthOrbitPeriod = 4; // Earth's orbit period
-const static float moonOrbitPeriod = 2;  // Moon's orbit period
+// Constants for celestial bodies
+const static float kSizeSun = 1.0f;
+const static float kSizeEarth = 0.5f;
+const static float kSizeMoon = 0.25f;
+const static float kRadOrbitEarth = 10.0f;
+const static float kRadOrbitMoon = 2.0f;
+
+// Orbital periods (in seconds)
+const static float earthOrbitPeriod = 4.0f; // Earth's orbit period around the Sun
+const static float moonOrbitPeriod = 2.0f;  // Moon's orbit period around the Earth
+
+// Own rotation periods (in seconds)
+const static float earthRotationPeriod = earthOrbitPeriod / 2.0f; // Earth's own rotation period
+const static float moonRotationPeriod = moonOrbitPeriod;           // Moon's own rotation period
 
 // Window parameters
 GLFWwindow *g_window = nullptr;
@@ -68,12 +78,6 @@ GLFWwindow *g_window = nullptr;
 // GPU programs
 GLuint g_program = 0;         // Main shader program
 GLuint skyboxProgram = 0;     // Skybox shader program
-
-// OpenGL identifiers
-GLuint g_vao = 0;
-GLuint g_posVbo = 0;
-GLuint g_colVbo = 0;
-GLuint g_ibo = 0;
 
 // Matrices for celestial bodies
 glm::mat4 g_sun = glm::scale(glm::mat4(1.0f), glm::vec3(kSizeSun));
@@ -87,7 +91,7 @@ glm::vec3 sunColor = glm::vec3(1.0f, 1.0f, 0.0f); // Yellowish
 class Camera {
 public:
     Camera()
-        : m_pos(0.0f, 0.0f, 0.0f),
+        : m_pos(0.0f, 0.0f, 30.0f),
           m_front(0.0f, 0.0f, -1.0f),
           m_up(0.0f, 1.0f, 0.0f),
           m_yaw(-90.0f),
@@ -96,7 +100,11 @@ public:
           m_sensitivity(0.1f),
           m_firstMouse(true),
           m_lastX(0.0f),
-          m_lastY(0.0f) {}
+          m_lastY(0.0f),
+          m_fov(45.0f),
+          m_aspectRatio(1.0f),
+          m_near(0.1f),
+          m_far(100.0f) {}
 
     inline float getFov() const { return m_fov; }
     inline void setFoV(const float f) { m_fov = f; }
@@ -202,10 +210,10 @@ private:
     float m_pitch;
     float m_speed;
     float m_sensitivity;
-    float m_fov = 45.f;
-    float m_aspectRatio = 1.f;
-    float m_near = 0.1f;
-    float m_far = 100.f;
+    float m_fov;
+    float m_aspectRatio;
+    float m_near;
+    float m_far;
     bool m_firstMouse;
     float m_lastX;
     float m_lastY;
@@ -213,6 +221,7 @@ private:
 
 Camera g_camera;
 
+// Function to load a texture from file and upload to GPU
 GLuint loadTextureFromFileToGPU(const std::string &filename) {
     int width, height, numComponents;
     unsigned char *data = stbi_load(filename.c_str(), &width, &height, &numComponents, 0);
@@ -324,27 +333,25 @@ public:
     void render() {
         glBindVertexArray(m_vao);
         if (!m_triangleIndices.empty()) {
-            glDrawElements(GL_TRIANGLES, m_triangleIndices.size(), GL_UNSIGNED_INT, 0);
+            glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(m_triangleIndices.size()), GL_UNSIGNED_INT, 0);
         } else {
-            glDrawArrays(GL_TRIANGLES, 0, m_vertexPositions.size() / 3);
+            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(m_vertexPositions.size() / 3));
         }
         glBindVertexArray(0);
     }
 
-    // Generate a sphere mesh
-    static std::shared_ptr<Mesh> genSphere(const size_t resolution = 16) {
+    // Generate a sphere mesh with updated math to match user's code
+    static std::shared_ptr<Mesh> genSphere(const size_t resolution=16){
         auto mesh = std::make_shared<Mesh>();
-        float dTheta = 2.0f * M_PI / resolution;
-        float dPhi = M_PI / resolution;
+        for (size_t lat = 0; lat <= resolution; ++lat) {
+            float phi = lat * PI / resolution;
+            for (size_t lon = 0; lon <= resolution; ++lon) {
+                float theta = lon * 2.0f * PI / resolution;
 
-        for (size_t i = 0; i <= resolution; ++i) {
-            float phi = i * dPhi;
-            for (size_t j = 0; j <= resolution; ++j) {
-                float theta = j * dTheta;
-
-                float x = sin(phi) * cos(theta);
+                // Updated math: x = sin(phi) * sin(theta), z = sin(phi) * cos(theta)
+                float x = sin(phi) * sin(theta);
                 float y = cos(phi);
-                float z = sin(phi) * sin(theta);
+                float z = sin(phi) * cos(theta);
 
                 mesh->m_vertexPositions.push_back(x);
                 mesh->m_vertexPositions.push_back(y);
@@ -354,18 +361,21 @@ public:
                 mesh->m_vertexNormals.push_back(y);
                 mesh->m_vertexNormals.push_back(z);
 
-                mesh->m_vertexTexCoords.push_back(static_cast<float>(j) / resolution);
-                mesh->m_vertexTexCoords.push_back(static_cast<float>(i) / resolution);
+                float u = static_cast<float>(lon) / resolution;
+                float v = static_cast<float>(lat) / resolution;
 
-                if (i < resolution && j < resolution) {
-                    size_t idx = i * (resolution + 1) + j;
-                    mesh->m_triangleIndices.push_back(idx);
-                    mesh->m_triangleIndices.push_back(idx + resolution + 1);
-                    mesh->m_triangleIndices.push_back(idx + resolution + 2);
+                mesh->m_vertexTexCoords.push_back(u);
+                mesh->m_vertexTexCoords.push_back(v);
 
-                    mesh->m_triangleIndices.push_back(idx);
-                    mesh->m_triangleIndices.push_back(idx + resolution + 2);
-                    mesh->m_triangleIndices.push_back(idx + 1);
+                if (lat < resolution && lon < resolution) {
+                    size_t idx = lat * (resolution + 1) + lon;
+                    mesh->m_triangleIndices.push_back(static_cast<unsigned int>(idx));
+                    mesh->m_triangleIndices.push_back(static_cast<unsigned int>(idx + resolution + 1));
+                    mesh->m_triangleIndices.push_back(static_cast<unsigned int>(idx + resolution + 2));
+
+                    mesh->m_triangleIndices.push_back(static_cast<unsigned int>(idx));
+                    mesh->m_triangleIndices.push_back(static_cast<unsigned int>(idx + resolution + 2));
+                    mesh->m_triangleIndices.push_back(static_cast<unsigned int>(idx + 1));
                 }
             }
         }
@@ -452,7 +462,7 @@ float simulationTime = 0.0f; // Custom simulation time
 bool isSimulationFrozen = false; // Simulation frozen state
 
 // Input handling
-bool keys[1024];
+bool keys[1024] = { false };
 
 // GLFW callbacks
 void windowSizeCallback(GLFWwindow *window, int width, int height) {
@@ -461,16 +471,18 @@ void windowSizeCallback(GLFWwindow *window, int width, int height) {
 }
 
 void keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods) {
-    if (action == GLFW_PRESS)
-        keys[key] = true;
-    else if (action == GLFW_RELEASE)
-        keys[key] = false;
+    if (key >= 0 && key < 1024) {
+        if (action == GLFW_PRESS)
+            keys[key] = true;
+        else if (action == GLFW_RELEASE)
+            keys[key] = false;
+    }
 
     if (action == GLFW_PRESS && key == GLFW_KEY_ESCAPE)
         glfwSetWindowShouldClose(window, true);
 
-    // Add this block to toggle simulation frozen state
-    if (action == GLFW_PRESS && key == GLFW_KEY_F) { // 'F' key to freeze/unfreeze
+    // Toggle simulation frozen state with 'F' key
+    if (action == GLFW_PRESS && key == GLFW_KEY_F) {
         isSimulationFrozen = !isSimulationFrozen;
     }
 }
@@ -554,6 +566,10 @@ void initOpenGL() {
 // Load shader from file
 std::string file2String(const std::string &filename) {
     std::ifstream t(filename.c_str());
+    if (!t.is_open()) {
+        std::cerr << "ERROR: Could not open shader file " << filename << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
     std::stringstream buffer;
     buffer << t.rdbuf();
     return buffer.str();
@@ -583,11 +599,28 @@ void initGPUprogram() {
     loadShader(g_program, GL_FRAGMENT_SHADER, "fragmentShader.glsl");
     glLinkProgram(g_program);
 
+    // Check for linking errors
+    GLint success;
+    GLchar infoLog[512];
+    glGetProgramiv(g_program, GL_LINK_STATUS, &success);
+    if (!success) {
+        glGetProgramInfoLog(g_program, 512, NULL, infoLog);
+        std::cout << "ERROR: Shader program linking failed:\n" << infoLog << std::endl;
+    }
+
     skyboxProgram = glCreateProgram();
     loadShader(skyboxProgram, GL_VERTEX_SHADER, "skyboxVertexShader.glsl");
     loadShader(skyboxProgram, GL_FRAGMENT_SHADER, "skyboxFragmentShader.glsl");
     glLinkProgram(skyboxProgram);
 
+    // Check for linking errors
+    glGetProgramiv(skyboxProgram, GL_LINK_STATUS, &success);
+    if (!success) {
+        glGetProgramInfoLog(skyboxProgram, 512, NULL, infoLog);
+        std::cout << "ERROR: Skybox shader program linking failed:\n" << infoLog << std::endl;
+    }
+
+    // Set texture samplers
     glUseProgram(skyboxProgram);
     glUniform1i(glGetUniformLocation(skyboxProgram, "skybox"), 0);
 
@@ -596,7 +629,7 @@ void initGPUprogram() {
 }
 
 void initCPUgeometry() {
-    g_sphereMesh = Mesh::genSphere(32);
+    g_sphereMesh = Mesh::genSphere(16); // Set resolution to 16 to match user's code
     skyboxMesh = Mesh::genCube();
 }
 
@@ -610,9 +643,9 @@ void initCamera() {
     glfwGetWindowSize(g_window, &width, &height);
     g_camera.setAspectRatio(static_cast<float>(width) / static_cast<float>(height));
 
-    g_camera.setPosition(glm::vec3(0.0, 0.0, 30.0));
+    g_camera.setPosition(glm::vec3(0.0f, 0.0f, 30.0f));
 
-    g_camera.setNear(0.1);
+    g_camera.setNear(0.1f);
     g_camera.setFar(100.0f);
 }
 
@@ -669,30 +702,39 @@ void render() {
     glUniformMatrix4fv(glGetUniformLocation(g_program, "projMat"), 1, GL_FALSE, glm::value_ptr(projMatrix));
 
     const glm::vec3 camPosition = g_camera.getPosition();
-    glUniform3f(glGetUniformLocation(g_program, "camPos"), camPosition[0], camPosition[1], camPosition[2]);
+    glUniform3f(glGetUniformLocation(g_program, "camPos"), camPosition.x, camPosition.y, camPosition.z);
 
     glm::vec3 lightPosition = glm::vec3(0.0f, 0.0f, 0.0f);
     glUniform3fv(glGetUniformLocation(g_program, "lightPos"), 1, glm::value_ptr(lightPosition));
 
-    // Render the sun
-    glUniformMatrix4fv(glGetUniformLocation(g_program, "modelMat"), 1, GL_FALSE, glm::value_ptr(g_sun));
+    // Render the Sun
+    glm::mat4 modelMat = g_sun;
+    glm::mat3 normalMat = glm::transpose(glm::inverse(glm::mat3(modelMat)));
+    glUniformMatrix4fv(glGetUniformLocation(g_program, "modelMat"), 1, GL_FALSE, glm::value_ptr(modelMat));
+    glUniformMatrix3fv(glGetUniformLocation(g_program, "normalMat"), 1, GL_FALSE, glm::value_ptr(normalMat));
     glUniform3fv(glGetUniformLocation(g_program, "objectColor"), 1, glm::value_ptr(sunColor));
     glUniform1i(glGetUniformLocation(g_program, "useTexture"), GL_FALSE);
     glUniform1i(glGetUniformLocation(g_program, "isSun"), GL_TRUE);
     g_sphereMesh->render();
 
-    // Render the earth
+    // Render the Earth
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, earthTexture);
-    glUniformMatrix4fv(glGetUniformLocation(g_program, "modelMat"), 1, GL_FALSE, glm::value_ptr(g_earth));
+    modelMat = g_earth;
+    normalMat = glm::transpose(glm::inverse(glm::mat3(modelMat)));
+    glUniformMatrix4fv(glGetUniformLocation(g_program, "modelMat"), 1, GL_FALSE, glm::value_ptr(modelMat));
+    glUniformMatrix3fv(glGetUniformLocation(g_program, "normalMat"), 1, GL_FALSE, glm::value_ptr(normalMat));
     glUniform1i(glGetUniformLocation(g_program, "useTexture"), GL_TRUE);
     glUniform1i(glGetUniformLocation(g_program, "isSun"), GL_FALSE);
     g_sphereMesh->render();
 
-    // Render the moon
+    // Render the Moon
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, moonTexture);
-    glUniformMatrix4fv(glGetUniformLocation(g_program, "modelMat"), 1, GL_FALSE, glm::value_ptr(g_moon));
+    modelMat = g_moon;
+    normalMat = glm::transpose(glm::inverse(glm::mat3(modelMat)));
+    glUniformMatrix4fv(glGetUniformLocation(g_program, "modelMat"), 1, GL_FALSE, glm::value_ptr(modelMat));
+    glUniformMatrix3fv(glGetUniformLocation(g_program, "normalMat"), 1, GL_FALSE, glm::value_ptr(normalMat));
     glUniform1i(glGetUniformLocation(g_program, "useTexture"), GL_TRUE);
     glUniform1i(glGetUniformLocation(g_program, "isSun"), GL_FALSE);
     g_sphereMesh->render();
@@ -700,7 +742,7 @@ void render() {
     // Draw skybox
     glDepthFunc(GL_LEQUAL);
     glUseProgram(skyboxProgram);
-    glm::mat4 view = glm::mat4(glm::mat3(g_camera.computeViewMatrix()));
+    glm::mat4 view = glm::mat4(glm::mat3(g_camera.computeViewMatrix())); // Remove translation from the view matrix
     glUniformMatrix4fv(glGetUniformLocation(skyboxProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
     glUniformMatrix4fv(glGetUniformLocation(skyboxProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projMatrix));
 
@@ -722,18 +764,22 @@ void update(const float currentTimeInSec) {
         simulationTime += deltaTime;
     }
 
-    // Calculate orbital angles
-    float earthOrbitAngle = simulationTime / earthOrbitPeriod * 2 * M_PI;
-    float moonOrbitAngle = simulationTime / moonOrbitPeriod * 2 * M_PI;
+    // Calculate orbital and rotation angles
+    float earthOrbitAngle = (simulationTime / earthOrbitPeriod) * 2.0f * PI;
+    float earthRotationAngle = (simulationTime / earthRotationPeriod) * 2.0f * PI;
+    float moonOrbitAngle = (simulationTime / moonOrbitPeriod) * 2.0f * PI;
+    float moonRotationAngle = (simulationTime / moonRotationPeriod) * 2.0f * PI;
 
-    // Update earth transformation
-    g_earth = glm::translate(glm::mat4(1.0f), glm::vec3(kRadOrbitEarth * cos(earthOrbitAngle), 0.0f, kRadOrbitEarth * sin(earthOrbitAngle))) *
-              glm::rotate(glm::mat4(1.0f), -earthOrbitAngle, glm::vec3(0.0f, 1.0f, 0.0f)) * // Counter-rotation to keep orientation fixed
+    // Update Earth transformation with own rotation
+    g_earth = glm::rotate(glm::mat4(1.0f), earthOrbitAngle, glm::vec3(0.0f, 1.0f, 0.0f)) *
+              glm::translate(glm::mat4(1.0f), glm::vec3(kRadOrbitEarth, 0.0f, 0.0f)) *
+              glm::rotate(glm::mat4(1.0f), earthRotationAngle, glm::vec3(0.0f, 1.0f, 0.0f)) *
               glm::scale(glm::mat4(1.0f), glm::vec3(kSizeEarth));
 
-    // Update moon transformation
-    glm::mat4 moonLocal = glm::translate(glm::mat4(1.0f), glm::vec3(kRadOrbitMoon * cos(moonOrbitAngle), 0.0f, kRadOrbitMoon * sin(moonOrbitAngle))) *
-                          glm::rotate(glm::mat4(1.0f), -moonOrbitAngle, glm::vec3(0.0f, 1.0f, 0.0f)) * // Counter-rotation
+    // Update Moon transformation with own rotation
+    glm::mat4 moonLocal = glm::rotate(glm::mat4(1.0f), moonOrbitAngle, glm::vec3(0.0f, 1.0f, 0.0f)) *
+                          glm::translate(glm::mat4(1.0f), glm::vec3(kRadOrbitMoon, 0.0f, 0.0f)) *
+                          glm::rotate(glm::mat4(1.0f), moonRotationAngle, glm::vec3(0.0f, 1.0f, 0.0f)) *
                           glm::scale(glm::mat4(1.0f), glm::vec3(kSizeMoon));
 
     // Apply Earth's transformation to the Moon
