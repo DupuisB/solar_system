@@ -622,7 +622,7 @@ void initTextures() {
     earthTexture = loadTextureFromFileToGPU("./media/earth.jpg");
     moonTexture = loadTextureFromFileToGPU("./media/moon.jpg");
 
-    std::string textureFolderPath = "./media/skyboxDefault";
+    std::string textureFolderPath = "./media/skybox";
     std::string textureExtension = ".png";
 
     std::vector<std::string> faces = {
