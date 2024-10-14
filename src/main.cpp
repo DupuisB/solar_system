@@ -59,18 +59,21 @@ const float PI = 3.14159265358979323846f;
 
 // Constants for celestial bodies
 const static float kSizeSun = 1.0f;
+
 const static float kSizeEarth = 0.5f;
-const static float kSizeMoon = 0.25f;
 const static float kRadOrbitEarth = 10.0f;
-const static float kRadOrbitMoon = 2.0f;
-
-// Orbital periods (in seconds)
 const static float earthOrbitPeriod = 4.0f; // Earth's orbit period around the Sun
-const static float moonOrbitPeriod = 2.0f;  // Moon's orbit period around the Earth
-
-// Own rotation periods (in seconds)
 const static float earthRotationPeriod = earthOrbitPeriod / 2.0f; // Earth's own rotation period
-const static float moonRotationPeriod = moonOrbitPeriod;           // Moon's own rotation period
+
+const static float kSizeMoon = 0.25f;
+const static float kRadOrbitMoon = 2.0f;
+const static float moonOrbitPeriod = 2.0f;  // Moon's orbit period around the Earth
+const static float moonRotationPeriod = moonOrbitPeriod;  // Moon's own rotation period
+
+const static float kSizeSaturn = 0.75f;
+const static float kRadOrbitSaturn = 25.0f;
+const static float saturnOrbitPeriod = 20.0f;  // Saturn's orbit period around the Sun
+const static float saturnRotationPeriod = saturnOrbitPeriod / 3.0f;  // Saturn's own rotation period
 
 // Window parameters
 GLFWwindow *g_window = nullptr;
@@ -83,6 +86,7 @@ GLuint skyboxProgram = 0;     // Skybox shader program
 glm::mat4 g_sun = glm::scale(glm::mat4(1.0f), glm::vec3(kSizeSun));
 glm::mat4 g_earth = glm::mat4(1.0f);
 glm::mat4 g_moon = glm::mat4(1.0f);
+glm::mat4 g_saturn = glm::mat4(1.0f);
 
 // Sun color
 glm::vec3 sunColor = glm::vec3(1.0f, 1.0f, 0.0f); // Yellowish
@@ -649,11 +653,12 @@ void initCamera() {
     g_camera.setFar(100.0f);
 }
 
-GLuint earthTexture, moonTexture;
+GLuint earthTexture, moonTexture, saturnTexture;
 
 void initTextures() {
     earthTexture = loadTextureFromFileToGPU("./media/earth.jpg");
     moonTexture = loadTextureFromFileToGPU("./media/moon.jpg");
+    saturnTexture = loadTextureFromFileToGPU("./media/saturn.jpg");
 
     std::string textureFolderPath = "./media/skybox";
     std::string textureExtension = ".png";
@@ -739,6 +744,17 @@ void render() {
     glUniform1i(glGetUniformLocation(g_program, "isSun"), GL_FALSE);
     g_sphereMesh->render();
 
+    // Render Saturn
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, saturnTexture);
+    modelMat = g_saturn;
+    normalMat = glm::transpose(glm::inverse(glm::mat3(modelMat)));
+    glUniformMatrix4fv(glGetUniformLocation(g_program, "modelMat"), 1, GL_FALSE, glm::value_ptr(modelMat));
+    glUniformMatrix3fv(glGetUniformLocation(g_program, "normalMat"), 1, GL_FALSE, glm::value_ptr(normalMat));
+    glUniform1i(glGetUniformLocation(g_program, "useTexture"), GL_TRUE);
+    glUniform1i(glGetUniformLocation(g_program, "isSun"), GL_FALSE);
+    g_sphereMesh->render();
+
     // Draw skybox
     glDepthFunc(GL_LEQUAL);
     glUseProgram(skyboxProgram);
@@ -767,16 +783,20 @@ void update(const float currentTimeInSec) {
     // Calculate orbital and rotation angles
     float earthOrbitAngle = (simulationTime / earthOrbitPeriod) * 2.0f * PI;
     float earthRotationAngle = (simulationTime / earthRotationPeriod) * 2.0f * PI;
+
     float moonOrbitAngle = (simulationTime / moonOrbitPeriod) * 2.0f * PI;
     float moonRotationAngle = (simulationTime / moonRotationPeriod) * 2.0f * PI;
 
-    // Update Earth transformation with own rotation
+    float saturnOrbitAngle = (simulationTime / saturnOrbitPeriod) * 2.0f * PI;
+    float saturnRotationAngle = (simulationTime / saturnRotationPeriod) * 2.0f * PI;
+
+    // Update Earth
     g_earth = glm::rotate(glm::mat4(1.0f), earthOrbitAngle, glm::vec3(0.0f, 1.0f, 0.0f)) *
               glm::translate(glm::mat4(1.0f), glm::vec3(kRadOrbitEarth, 0.0f, 0.0f)) *
               glm::rotate(glm::mat4(1.0f), earthRotationAngle, glm::vec3(0.0f, 1.0f, 0.0f)) *
               glm::scale(glm::mat4(1.0f), glm::vec3(kSizeEarth));
 
-    // Update Moon transformation with own rotation
+    // Update Moon
     glm::mat4 moonLocal = glm::rotate(glm::mat4(1.0f), moonOrbitAngle, glm::vec3(0.0f, 1.0f, 0.0f)) *
                           glm::translate(glm::mat4(1.0f), glm::vec3(kRadOrbitMoon, 0.0f, 0.0f)) *
                           glm::rotate(glm::mat4(1.0f), moonRotationAngle, glm::vec3(0.0f, 1.0f, 0.0f)) *
@@ -784,6 +804,12 @@ void update(const float currentTimeInSec) {
 
     // Apply Earth's transformation to the Moon
     g_moon = g_earth * moonLocal;
+
+    // Update Saturn
+    g_saturn = glm::rotate(glm::mat4(1.0f), saturnOrbitAngle, glm::vec3(0.0f, 1.0f, 0.0f)) *
+               glm::translate(glm::mat4(1.0f), glm::vec3(kRadOrbitSaturn, 0.0f, 0.0f)) *
+               glm::rotate(glm::mat4(1.0f), saturnRotationAngle, glm::vec3(0.0f, 1.0f, 0.0f)) *
+               glm::scale(glm::mat4(1.0f), glm::vec3(kSizeSaturn));
 
     // Process camera movement
     doMovement();
