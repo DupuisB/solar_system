@@ -47,3 +47,9 @@
 - **Mouse Controls**:
   - **Movement**: Look around.
   - **Scroll Wheel**: Zoom in and out.
+
+## Sources:
+
+- **Textures**: https://planetpixelemporium.com/saturn.html
+
+- **SkyBox**: https://tools.wwwtyro.net/space-3d/index.html
