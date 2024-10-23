@@ -437,6 +437,7 @@ public:
         return mesh;
     }
 
+
     GLuint getVao() const { return m_vao; }
 
 private:
@@ -770,8 +771,7 @@ void render() {
     glDepthFunc(GL_LESS);
 }
 
-void update(const float currentTimeInSec) {
-    float currentFrame = static_cast<float>(glfwGetTime());
+void update(const float currentFrame) {
     deltaTime = currentFrame - lastFrame;
     lastFrame = currentFrame;
 

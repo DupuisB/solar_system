@@ -1,3 +1,4 @@
+// Processes the vertex data: from local space to clip space. Next stage is the rasterizer, then the fragment shader.
 #version 330 core
 
 layout(location = 0) in vec3 aPos;
@@ -5,7 +6,6 @@ layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec2 aTexCoord;
 
 uniform mat4 modelMat;
-uniform mat3 normalMat;
 uniform mat4 viewMat;
 uniform mat4 projMat;
 
@@ -19,8 +19,8 @@ void main()
     vec4 worldPosition = modelMat * vec4(aPos, 1.0);
     fPosition = worldPosition.xyz;
 
-    // Transform the normal to world space using the normal matrix
-    fNormal = normalize(normalMat * aNormal);
+    // Transform the normal to world space
+    fNormal = mat3(transpose(inverse(modelMat))) * aNormal;
 
     // Pass the texture coordinate to the fragment shader
     fTexCoord = aTexCoord;
