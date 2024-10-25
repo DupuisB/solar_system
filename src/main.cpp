@@ -1,3 +1,4 @@
+// main.cpp
 // ----------------------------------------------------------------------------
 // main.cpp
 //
@@ -5,7 +6,7 @@
 //      Author: Kiwon Um
 //        Mail: kiwon.um@telecom-paris.fr
 //
-// Description: IGR201 Practical; OpenGL and Shaders (DO NOT distribute!)
+// Description: IGR201 Practical; OpenGL and Shaders (Modified to include Saturn's rings)
 //
 // ----------------------------------------------------------------------------
 
@@ -13,11 +14,13 @@
 /*
 [Project 1] IGR201 Practical: OpenGL and Shaders
 
-This assignment creates a simple 3D solar system with the Sun, Earth, and Moon.
+This assignment creates a simple 3D solar system with the Sun, Earth, Moon, and Saturn.
 - The Sun is at the center and acts as a light source.
 - The Earth orbits the Sun and rotates around its own axis.
 - The Moon orbits the Earth and rotates around its own axis.
-- Textures are applied to Earth and Moon for realism.
+- Saturn orbits the Sun and rotates around its own axis.
+- Saturn has rings textured with a provided colormap.
+- Textures are applied to Earth, Moon, and Saturn for realism.
 - A skybox provides a background environment.
 - The camera can be moved and zoomed to observe the scene from different angles.
 
@@ -437,6 +440,61 @@ public:
         return mesh;
     }
 
+    // Generate a ring mesh (annulus) with given inner and outer radii and resolution
+    static std::shared_ptr<Mesh> genRing(float innerRadius, float outerRadius, size_t resolution = 64) {
+        auto mesh = std::make_shared<Mesh>();
+        for (size_t i = 0; i <= resolution; ++i) {
+            float theta = i * 2.0f * PI / resolution;
+            float cosTheta = cos(theta);
+            float sinTheta = sin(theta);
+
+            // Outer vertex
+            float x_outer = outerRadius * cosTheta;
+            float z_outer = outerRadius * sinTheta;
+            mesh->m_vertexPositions.push_back(x_outer);
+            mesh->m_vertexPositions.push_back(0.0f); // Flat ring in XZ plane
+            mesh->m_vertexPositions.push_back(z_outer);
+
+            // Inner vertex
+            float x_inner = innerRadius * cosTheta;
+            float z_inner = innerRadius * sinTheta;
+            mesh->m_vertexPositions.push_back(x_inner);
+            mesh->m_vertexPositions.push_back(0.0f);
+            mesh->m_vertexPositions.push_back(z_inner);
+
+            // Normals (pointing up)
+            mesh->m_vertexNormals.push_back(0.0f);
+            mesh->m_vertexNormals.push_back(1.0f);
+            mesh->m_vertexNormals.push_back(0.0f);
+
+            mesh->m_vertexNormals.push_back(0.0f);
+            mesh->m_vertexNormals.push_back(1.0f);
+            mesh->m_vertexNormals.push_back(0.0f);
+
+            // Texture coordinates
+            float u = static_cast<float>(i) / resolution;
+            mesh->m_vertexTexCoords.push_back(u);
+            mesh->m_vertexTexCoords.push_back(0.0f); // Outer edge
+            mesh->m_vertexTexCoords.push_back(u);
+            mesh->m_vertexTexCoords.push_back(1.0f); // Inner edge
+        }
+
+        // Generate triangle strip indices
+        for (size_t i = 0; i < resolution; ++i) {
+            mesh->m_triangleIndices.push_back(static_cast<unsigned int>(2 * i));
+            mesh->m_triangleIndices.push_back(static_cast<unsigned int>(2 * i + 1));
+            mesh->m_triangleIndices.push_back(static_cast<unsigned int>(2 * (i + 1)));
+
+            mesh->m_triangleIndices.push_back(static_cast<unsigned int>(2 * (i + 1)));
+            mesh->m_triangleIndices.push_back(static_cast<unsigned int>(2 * i + 1));
+            mesh->m_triangleIndices.push_back(static_cast<unsigned int>(2 * (i + 1) + 1));
+        }
+
+        return mesh;
+    }
+
+    // Generate a ring mesh with multiple layers (optional)
+    // You can extend this method to support multiple ring layers if desired
 
     GLuint getVao() const { return m_vao; }
 
@@ -452,11 +510,16 @@ private:
     GLuint m_ibo = 0;
 };
 
+// Declare the sphere, skybox, and ring meshes
 std::shared_ptr<Mesh> g_sphereMesh = std::make_shared<Mesh>();
 std::shared_ptr<Mesh> skyboxMesh = std::make_shared<Mesh>();
+std::shared_ptr<Mesh> g_ringMesh = nullptr; // Added for Saturn's rings
 
 // Skybox variables
 GLuint cubemapTexture;
+
+// Ring texture
+GLuint ringTexture = 0;
 
 // Time management
 float deltaTime = 0.0f;	
@@ -539,7 +602,7 @@ void initGLFW() {
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE); 
     glfwWindowHint(GLFW_RESIZABLE, GL_TRUE);
 
-    g_window = glfwCreateWindow(1024, 1024, "Simple Solar System", nullptr, nullptr);
+    g_window = glfwCreateWindow(1024, 1024, "Simple Solar System with Saturn's Rings", nullptr, nullptr);
     if (!g_window) {
         std::cerr << "ERROR: Failed to open window" << std::endl;
         glfwTerminate();
@@ -566,6 +629,10 @@ void initOpenGL() {
     glDepthFunc(GL_LESS);                 
     glEnable(GL_DEPTH_TEST);              
     glClearColor(0.7f, 0.7f, 0.7f, 1.0f); 
+
+    // Enable blending for transparency (for Saturn's rings)
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
 
 // Load shader from file
@@ -634,13 +701,24 @@ void initGPUprogram() {
 }
 
 void initCPUgeometry() {
-    g_sphereMesh = Mesh::genSphere(16); // Set resolution to 16 to match user's code
+    g_sphereMesh = Mesh::genSphere(16); // Existing spheres
     skyboxMesh = Mesh::genCube();
+
+    // Generate the ring mesh
+    // Adjust inner and outer radii based on Saturn's size
+    float innerRadius = kSizeSaturn * 1.5f; // Example scaling
+    float outerRadius = kSizeSaturn * 2.5f; // Example scaling
+    g_ringMesh = Mesh::genRing(innerRadius, outerRadius, 128); // Higher resolution for smoother rings
 }
 
 void initGPUgeometry() {
     g_sphereMesh->init();
     skyboxMesh->init();
+
+    // Initialize the ring mesh
+    if (g_ringMesh) {
+        g_ringMesh->init();
+    }
 }
 
 void initCamera() {
@@ -660,7 +738,8 @@ void initTextures() {
     earthTexture = loadTextureFromFileToGPU("./media/earth.jpg");
     moonTexture = loadTextureFromFileToGPU("./media/moon.jpg");
     saturnTexture = loadTextureFromFileToGPU("./media/saturn.jpg");
-
+    ringTexture = loadTextureFromFileToGPU("./media/saturn_ring.jpg");
+    
     std::string textureFolderPath = "./media/skybox";
     std::string textureExtension = ".png";
 
@@ -755,6 +834,28 @@ void render() {
     glUniform1i(glGetUniformLocation(g_program, "useTexture"), GL_TRUE);
     glUniform1i(glGetUniformLocation(g_program, "isSun"), GL_FALSE);
     g_sphereMesh->render();
+
+    // Render Saturn's Rings
+    if (g_ringMesh) {
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, ringTexture);
+        glm::mat4 ringModelMat = g_saturn;
+
+        // Tilt the rings for a more realistic appearance
+        float ringTiltAngle = glm::radians(27.0f); // Example tilt angle
+        ringModelMat = glm::rotate(ringModelMat, ringTiltAngle, glm::vec3(1.0f, 0.0f, 0.0f));
+
+        // Optionally, scale the ring if necessary
+        // ringModelMat = glm::scale(ringModelMat, glm::vec3(1.0f));
+
+        normalMat = glm::transpose(glm::inverse(glm::mat3(ringModelMat)));
+        glUniformMatrix4fv(glGetUniformLocation(g_program, "modelMat"), 1, GL_FALSE, glm::value_ptr(ringModelMat));
+        glUniformMatrix3fv(glGetUniformLocation(g_program, "normalMat"), 1, GL_FALSE, glm::value_ptr(normalMat));
+        glUniform3fv(glGetUniformLocation(g_program, "objectColor"), 1, glm::value_ptr(glm::vec3(1.0f))); // Not used when textured
+        glUniform1i(glGetUniformLocation(g_program, "useTexture"), GL_TRUE);
+        glUniform1i(glGetUniformLocation(g_program, "isSun"), GL_FALSE);
+        g_ringMesh->render();
+    }
 
     // Draw skybox
     glDepthFunc(GL_LEQUAL);
