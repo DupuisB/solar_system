@@ -19,10 +19,11 @@ This assignment creates a simple 3D solar system with the Sun, Earth, Moon, and 
 - The Earth orbits the Sun and rotates around its own axis.
 - The Moon orbits the Earth and rotates around its own axis.
 - Saturn orbits the Sun and rotates around its own axis.
-- Saturn has rings textured with a provided colormap.
+- Saturn has rings textured with a provided colormap (rings are not working properly)
 - Textures are applied to Earth, Moon, and Saturn for realism.
 - A skybox provides a background environment.
 - The camera can be moved and zoomed to observe the scene from different angles.
+- The simulation can be paused and resumed with the 'F' key.
 
 Libraries Used:
 - OpenGL
@@ -65,18 +66,18 @@ const static float kSizeSun = 1.0f;
 
 const static float kSizeEarth = 0.5f;
 const static float kRadOrbitEarth = 10.0f;
-const static float earthOrbitPeriod = 4.0f; // Earth's orbit period around the Sun
-const static float earthRotationPeriod = earthOrbitPeriod / 2.0f; // Earth's own rotation period
+const static float earthOrbitPeriod = 4.0f;
+const static float earthRotationPeriod = earthOrbitPeriod / 2.0f;
 
 const static float kSizeMoon = 0.25f;
 const static float kRadOrbitMoon = 2.0f;
-const static float moonOrbitPeriod = 2.0f;  // Moon's orbit period around the Earth
-const static float moonRotationPeriod = moonOrbitPeriod;  // Moon's own rotation period
+const static float moonOrbitPeriod = 2.0f; 
+const static float moonRotationPeriod = moonOrbitPeriod; 
 
 const static float kSizeSaturn = 0.75f;
 const static float kRadOrbitSaturn = 25.0f;
-const static float saturnOrbitPeriod = 20.0f;  // Saturn's orbit period around the Sun
-const static float saturnRotationPeriod = saturnOrbitPeriod / 3.0f;  // Saturn's own rotation period
+const static float saturnOrbitPeriod = 20.0f;
+const static float saturnRotationPeriod = saturnOrbitPeriod / 3.0f;
 
 // Window parameters
 GLFWwindow *g_window = nullptr;
@@ -169,7 +170,7 @@ public:
         }
 
         float xoffset = xpos - m_lastX;
-        float yoffset = m_lastY - ypos; // reversed since y-coordinates range from bottom to top
+        float yoffset = m_lastY - ypos;
         m_lastX = xpos;
         m_lastY = ypos;
 
@@ -203,6 +204,7 @@ public:
         front.y = sin(glm::radians(m_pitch));
         front.z = sin(glm::radians(m_yaw)) * cos(glm::radians(m_pitch));
         m_front = glm::normalize(front);
+        
         // also re-calculate the Right and Up vector
         m_right = glm::normalize(glm::cross(m_front, glm::vec3(0.0f, 1.0f, 0.0f)));
         m_up    = glm::normalize(glm::cross(m_right, m_front));
@@ -549,7 +551,6 @@ void keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods
     if (action == GLFW_PRESS && key == GLFW_KEY_ESCAPE)
         glfwSetWindowShouldClose(window, true);
 
-    // Toggle simulation frozen state with 'F' key
     if (action == GLFW_PRESS && key == GLFW_KEY_F) {
         isSimulationFrozen = !isSimulationFrozen;
     }
@@ -629,10 +630,6 @@ void initOpenGL() {
     glDepthFunc(GL_LESS);                 
     glEnable(GL_DEPTH_TEST);              
     glClearColor(0.7f, 0.7f, 0.7f, 1.0f); 
-
-    // Enable blending for transparency (for Saturn's rings)
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
 
 // Load shader from file
@@ -701,14 +698,13 @@ void initGPUprogram() {
 }
 
 void initCPUgeometry() {
-    g_sphereMesh = Mesh::genSphere(16); // Existing spheres
+    g_sphereMesh = Mesh::genSphere(16);
     skyboxMesh = Mesh::genCube();
 
     // Generate the ring mesh
-    // Adjust inner and outer radii based on Saturn's size
-    float innerRadius = kSizeSaturn * 1.5f; // Example scaling
-    float outerRadius = kSizeSaturn * 2.5f; // Example scaling
-    g_ringMesh = Mesh::genRing(innerRadius, outerRadius, 128); // Higher resolution for smoother rings
+    float innerRadius = kSizeSaturn * 1.5f;
+    float outerRadius = kSizeSaturn * 2.5f;
+    g_ringMesh = Mesh::genRing(innerRadius, outerRadius, 128);
 }
 
 void initGPUgeometry() {
@@ -732,15 +728,16 @@ void initCamera() {
     g_camera.setFar(100.0f);
 }
 
-GLuint earthTexture, moonTexture, saturnTexture;
+GLuint earthTexture, moonTexture, saturnTexture, sunTexture;
 
 void initTextures() {
-    earthTexture = loadTextureFromFileToGPU("./media/earth.jpg");
+    earthTexture = loadTextureFromFileToGPU("./media/earth2.jpg");
+    sunTexture = loadTextureFromFileToGPU("./media/sun2.jpg");
     moonTexture = loadTextureFromFileToGPU("./media/moon.jpg");
-    saturnTexture = loadTextureFromFileToGPU("./media/saturn.jpg");
+    saturnTexture = loadTextureFromFileToGPU("./media/saturn2.jpg");
     ringTexture = loadTextureFromFileToGPU("./media/saturn_ring.jpg");
     
-    std::string textureFolderPath = "./media/skybox";
+    std::string textureFolderPath = "./media/skyboxDefault"; // Change to "./media/skybox" to get a nebulae skybox
     std::string textureExtension = ".png";
 
     std::vector<std::string> faces = {
@@ -793,12 +790,14 @@ void render() {
     glUniform3fv(glGetUniformLocation(g_program, "lightPos"), 1, glm::value_ptr(lightPosition));
 
     // Render the Sun
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, sunTexture);
     glm::mat4 modelMat = g_sun;
     glm::mat3 normalMat = glm::transpose(glm::inverse(glm::mat3(modelMat)));
     glUniformMatrix4fv(glGetUniformLocation(g_program, "modelMat"), 1, GL_FALSE, glm::value_ptr(modelMat));
     glUniformMatrix3fv(glGetUniformLocation(g_program, "normalMat"), 1, GL_FALSE, glm::value_ptr(normalMat));
     glUniform3fv(glGetUniformLocation(g_program, "objectColor"), 1, glm::value_ptr(sunColor));
-    glUniform1i(glGetUniformLocation(g_program, "useTexture"), GL_FALSE);
+    glUniform1i(glGetUniformLocation(g_program, "useTexture"), GL_TRUE);
     glUniform1i(glGetUniformLocation(g_program, "isSun"), GL_TRUE);
     g_sphereMesh->render();
 
@@ -837,16 +836,14 @@ void render() {
 
     // Render Saturn's Rings
     if (g_ringMesh) {
+        glDisable(GL_CULL_FACE); // Disable face culling for rings
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, ringTexture);
         glm::mat4 ringModelMat = g_saturn;
 
-        // Tilt the rings for a more realistic appearance
-        float ringTiltAngle = glm::radians(27.0f); // Example tilt angle
+        // Tilt the rings
+        float ringTiltAngle = glm::radians(27.0f);
         ringModelMat = glm::rotate(ringModelMat, ringTiltAngle, glm::vec3(1.0f, 0.0f, 0.0f));
-
-        // Optionally, scale the ring if necessary
-        // ringModelMat = glm::scale(ringModelMat, glm::vec3(1.0f));
 
         normalMat = glm::transpose(glm::inverse(glm::mat3(ringModelMat)));
         glUniformMatrix4fv(glGetUniformLocation(g_program, "modelMat"), 1, GL_FALSE, glm::value_ptr(ringModelMat));
@@ -855,6 +852,7 @@ void render() {
         glUniform1i(glGetUniformLocation(g_program, "useTexture"), GL_TRUE);
         glUniform1i(glGetUniformLocation(g_program, "isSun"), GL_FALSE);
         g_ringMesh->render();
+        glEnable(GL_CULL_FACE);
     }
 
     // Draw skybox
