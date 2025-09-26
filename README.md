@@ -1,4 +1,4 @@
-# Solar System — OpenGL Demo
+# 🪐 Solar System — OpenGL Demo
 
 > This is my first project using OpenGL. Enjoy!
 
